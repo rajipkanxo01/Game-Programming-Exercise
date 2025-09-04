@@ -61,6 +61,9 @@ struct GameState {
     SDL_Texture *texture_atlas;
 
     std::array<Bullet, MAX_BULLETS> bullets; // bullet pool
+
+    bool game_over = false;
+    float game_over_timer = 0.f;
 };
 
 static float distance_between_sq(SDL_FPoint a, SDL_FPoint b) {
@@ -164,7 +167,44 @@ static void init(SDLContext *context, GameState *game_state) {
     }
 }
 
+static void reset_game(SDLContext *context, GameState *game_state) {
+    // reset player position
+    game_state->player.position.x = context->window_width / 2 - game_state->player.size / 2;
+    game_state->player.position.y = context->window_height - game_state->player.size * 2;
+    game_state->player.rect.x = game_state->player.position.x;
+    game_state->player.rect.y = game_state->player.position.y;
+
+    // reset bullets
+    for (auto &bullet: game_state->bullets) {
+        bullet.active = false;
+    }
+
+    // reset asteroids
+    for (int i = 0; i < NUM_ASTEROIDS; ++i) {
+        Entity *asteroid = &game_state->asteroids[i];
+        asteroid->active = true;
+        asteroid->spawn_delay = SDL_randf() * 5.0f;
+        asteroid->position.x = asteroid->size + SDL_randf() * (context->window_width - asteroid->size * 2);
+        asteroid->position.y = -asteroid->size;
+        asteroid->velocity = 50.f + SDL_randf() * 150.f;
+    }
+}
+
 static void update(SDLContext *context, GameState *game_state) {
+    // handle game over state
+    if (game_state->game_over) {
+        game_state->game_over_timer -= context->delta;
+        if (game_state->game_over_timer <= 0.0f) {
+            reset_game(context, game_state);
+            game_state->game_over = false;
+        } else {
+            SDL_SetRenderDrawColor(context->renderer, 255, 0, 0, 255);
+            SDL_FRect text_rect = {context->window_width / 2 - 100, context->window_height / 2 - 25, 200, 50};
+            SDL_RenderFillRect(context->renderer, &text_rect);
+            return;
+        }
+    }
+
     // player
     {
         // movement
@@ -237,11 +277,19 @@ static void update(SDLContext *context, GameState *game_state) {
             current_asteroid->rect.y = current_asteroid->position.y;
 
             float distance_sq = distance_between_sq(current_asteroid->position, game_state->player.position);
+            // check if asteroid is too close to player
             if (distance_sq < collision_distance_sq) {
                 SDL_SetTextureColorMod(current_asteroid->texture_atlas, 0xFF, 0x00, 0x00);
-            } else if (distance_sq < warning_distance_sq) {
+                game_state->game_over = true;
+                game_state->game_over_timer = 2.0f;
+                return;
+            }
+            // change color if asteroid is within warning distance
+            else if (distance_sq < warning_distance_sq) {
                 SDL_SetTextureColorMod(current_asteroid->texture_atlas, 0xCC, 0xCC, 0x00);
-            } else {
+            }
+            // otherwise, set normal color
+            else {
                 SDL_SetTextureColorMod(current_asteroid->texture_atlas, 0xFF, 0xFF, 0xFF);
             }
 
@@ -253,7 +301,7 @@ static void update(SDLContext *context, GameState *game_state) {
                 current_asteroid->texture_atlas,
                 &current_asteroid->texture_rect,
                 &current_asteroid->rect,
-                SDL_GetTicks() * 0.05,
+                angle,
                 &rotation_center,
                 SDL_FLIP_NONE
             );
@@ -285,29 +333,6 @@ static void update(SDLContext *context, GameState *game_state) {
                 SDL_RenderFillRect(context->renderer, &bullet.rect);
             }
         }
-    }
-}
-
-static void reset_game(SDLContext *context, GameState *game_state) {
-    // reset player position
-    game_state->player.position.x = context->window_width / 2 - game_state->player.size / 2;
-    game_state->player.position.y = context->window_height - game_state->player.size * 2;
-    game_state->player.rect.x = game_state->player.position.x;
-    game_state->player.rect.y = game_state->player.position.y;
-
-    // reset bullets
-    for (auto &bullet: game_state->bullets) {
-        bullet.active = false;
-    }
-
-    // reset asteroids
-    for (int i = 0; i < NUM_ASTEROIDS; ++i) {
-        Entity *asteroid = &game_state->asteroids[i];
-        asteroid->active = true;
-        asteroid->spawn_delay = SDL_randf() * 5.0f;
-        asteroid->position.x = asteroid->size + SDL_randf() * (context->window_width - asteroid->size * 2);
-        asteroid->position.y = -asteroid->size;
-        asteroid->velocity = 50.f + SDL_randf() * 150.f;
     }
 }
 
