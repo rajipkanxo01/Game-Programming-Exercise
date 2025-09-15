@@ -98,7 +98,7 @@ static void init(SDLContext *context, GameState *game_state) {
         int n = 0;
         // stbi_load fills w, h and n with the image's width, height and channel count if loading succeeds
         SDL_Log("Looking for file in: %s", std::filesystem::current_path().string().c_str());
-        unsigned char *pixels = stbi_load("kenney/simpleSpace_tilesheet_2.png", &w, &h, &n, 4);
+        unsigned char *pixels = stbi_load("../data/kenney/simpleSpace_tilesheet_2.png", &w, &h, &n, 4);
 
         SDL_assert(pixels);
 
