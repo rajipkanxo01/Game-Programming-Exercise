@@ -1,9 +1,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #define ITU_UNITY_BUILD
 
-#define TEXTURE_PIXELS_PER_UNIT 128
-#define CAMERA_PIXELS_PER_UNIT  128
-
+#define TEXTURE_PIXELS_PER_UNIT 16
+#define CAMERA_PIXELS_PER_UNIT  16*4
 
 #include <SDL3/SDL.h>
 #include <itu_lib_engine.hpp>
@@ -13,13 +12,13 @@
 #define ENABLE_DIAGNOSTICS
 
 #define TARGET_FRAMERATE SECONDS(1) / 60
-#define WINDOW_W         800
-#define WINDOW_H         600
+#define WINDOW_W         1280
+#define WINDOW_H         720
 
 #define ENTITY_COUNT 4096
 
 bool DEBUG_render_textures = true;
-bool DEBUG_render_outlines = true;
+bool DEBUG_render_outlines = false;
 
 enum EntityType {
     ENTITY_PLAYER,
@@ -70,7 +69,7 @@ static void game_init(SDLContext *context, GameState *state) {
     SDL_assert(state->entities);
 
     // texture atlases
-    state->atlas = texture_create(context, "../data/kenney/simpleSpace_tilesheet_2.png", SDL_SCALEMODE_NEAREST);
+    state->atlas = texture_create(context, "../data/kenney/tiny_dungeon_packed.png", SDL_SCALEMODE_NEAREST);
     if (!state->atlas) {
         SDL_Log("Failed to load atlas: %s", SDL_GetError());
     }
@@ -86,17 +85,18 @@ static void game_init(SDLContext *context, GameState *state) {
 static void game_reset(SDLContext *context, GameState *state) {
     state->entities_alive_count = 0;
 
-    // Create background entity
+    // Create entity
     {
         Entity *bg = entity_create(state);
-        SDL_FRect sprite_rect = SDL_FRect{0, 0, 1024, 1024};
+        bg->transform.scale.x = context->window_w / context->camera_active->pixels_per_unit;
+        bg->transform.scale.y = context->window_h / context->camera_active->pixels_per_unit;
+
+        constexpr SDL_FRect sprite_rect = SDL_FRect{0, 0, 1024, 1024};
         itu_lib_sprite_init(
             &bg->sprite,
             state->bg,
-            // Get the rectangle area of the background texture to use for the sprite
-            itu_lib_sprite_get_rect(0, 0, 1024, 1024)
+            sprite_rect
         );
-        bg->transform.scale = VEC2F_ONE;
     }
 
     // Create player entity
@@ -108,7 +108,7 @@ static void game_reset(SDLContext *context, GameState *state) {
         itu_lib_sprite_init(
             &state->player->sprite,
             state->atlas,
-            itu_lib_sprite_get_rect(0, 1, 128, 128)
+            itu_lib_sprite_get_rect(0, 9, 16, 16)
         );
 
         // Raise sprite pivot so the position coincides with the center of the image
@@ -118,9 +118,8 @@ static void game_reset(SDLContext *context, GameState *state) {
 
 // Updates the game state each frame.
 // Handles player movement based on input and updates the camera to follow the player.
-static void game_update(SDLContext *context, GameState *state) {
-    {
-        const float player_speed = 1;
+static void game_update(SDLContext *context, GameState *state) { {
+        const float player_speed = 3;
 
         Entity *entity = state->player;
         vec2f mov = {0};
@@ -134,27 +133,53 @@ static void game_update(SDLContext *context, GameState *state) {
             mov.x += 1;
 
         entity->transform.position = entity->transform.position + mov * (player_speed * context->delta);
-
-        // camera follows player
-        context->camera_active->world_position = entity->transform.position;
     }
+
+    // camera follows player
+    const float zoom_speed = 1;
+
+    context->camera_active->world_position = state->player->transform.position;
+    context->camera_active->zoom += context->mouse_scroll * zoom_speed * context->delta;
 }
 
 static void game_render(SDLContext *context, GameState *state) {
+    // get camera values
+    vec2f cam_pos = context->camera_active->world_position;
+    float cam_zoom = context->camera_active->zoom;
+    float ppu = context->camera_active->pixels_per_unit;
+    vec2f screen_size = {context->window_w, context->window_h};
+
     for (int i = 0; i < state->entities_alive_count; ++i) {
         Entity *entity = &state->entities[i];
 
-        // render texture
-        SDL_FRect rect_src = entity->sprite.rect;
-        SDL_FRect rect_dst;
+        // get entity data
+        vec2f pos = entity->transform.position;
+        vec2f scale = entity->transform.scale;
 
-        itu_lib_sprite_render(context, &entity->sprite, &entity->transform);
+        // move entity into camera relative space
+        pos = pos - cam_pos;
 
-        if (DEBUG_render_outlines)
+        // convert entity size (world units) into pixels
+        float w = ppu * scale.x * cam_zoom;
+        float h = ppu * scale.y * cam_zoom;
+
+        // center world at middle of screen, apply scaling, subtract pivot
+        float x = screen_size.x * 0.5f + pos.x * ppu * cam_zoom - w * entity->sprite.pivot.x;
+
+        // flip Y axis (because SDL coordinates start top-left)
+        float y = screen_size.y * 0.5f - pos.y * ppu * cam_zoom - h * entity->sprite.pivot.y;
+
+        SDL_FRect rect_dst = {x, y, w, h};
+
+        SDL_RenderTexture(context->renderer, entity->sprite.texture, &entity->sprite.rect, &rect_dst);
+
+        if (DEBUG_render_outlines) {
             itu_lib_sprite_render_debug(context, &entity->sprite, &entity->transform);
+        }
     }
 
-    SDL_SetRenderDrawColor(context->renderer, 0xFF, 0x00, 0xFF, 0xff);
+    // draw magenta border
+    SDL_SetRenderDrawColor(context->renderer, 0xFF, 0x00, 0xFF, 0xFF);
     SDL_RenderRect(context->renderer, nullptr);
 }
 
@@ -171,8 +196,8 @@ int main(int argc, char *argv[]) {
     SDL_CreateWindowAndRenderer("E03 - Coordinate Systems", WINDOW_W, WINDOW_H, 0, &window, &context.renderer);
     SDL_SetRenderDrawBlendMode(context.renderer, SDL_BLENDMODE_BLEND);
 
-    context.camera_default.normalized_screen_size.x = 1.0f;
-    context.camera_default.normalized_screen_size.y = 1.0f;
+    context.camera_default.normalized_screen_size.x = context.window_w;
+    context.camera_default.normalized_screen_size.y = context.window_h;
     context.camera_default.normalized_screen_offset.x = 0.0f;
     context.camera_default.normalized_screen_offset.y = 0.0f;
     context.camera_default.zoom = 1.0f;
