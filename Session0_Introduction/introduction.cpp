@@ -21,6 +21,7 @@ void movePlayer(SDL_FRect &player, const bool *keys, SDL_Scancode up, SDL_Scanco
 int main() {
     // define rectangle
     SDL_FRect firstPlayer, secondPlayer;
+    //TODO: Would it make sense to have a struct OR anything for Player that contains player properties?
     firstPlayer.x = 300.f;
     firstPlayer.y = 200.f;
     firstPlayer.w = 50.f;
@@ -34,6 +35,7 @@ int main() {
     // time at start
     float lastNS = SDL_GetTicksNS();
 
+    //TODO: since window settings are not changing, would it make sense to define it.WINDOW_WIDTH, WINDOW_HEIGHT as const int at the top of the file?
     // window + renderer
     const int WINDOW_WIDTH = 800;
     const int WINDOW_HEIGHT = 600;
@@ -77,6 +79,7 @@ int main() {
 
         // calculate delta time
         float nowNS = SDL_GetTicksNS();
+        //TODO: It feels a bit weird to divide, and also speed is defined here and just sent to the function
         float dt = (nowNS - lastNS) / 1'000'000'000.0f; // convert to seconds
         lastNS = nowNS;
 

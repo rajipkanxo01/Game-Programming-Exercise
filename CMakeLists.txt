@@ -11,6 +11,7 @@ add_subdirectory(lib/SDL)
 include_directories(lib/stb)
 
 # repo's executables
-add_subdirectory(Session1_Introduction)
-add_subdirectory(Session2_Rendering)
-add_subdirectory(Session3_Collisions)
+add_subdirectory(Session0_Introduction)
+add_subdirectory(Session1_Rendering)
+add_subdirectory(Session2_Collisions)
+add_subdirectory(Session3_CoordinateSystems)
